@@ -38,12 +38,21 @@ async function run() {
       claims: db.collection("claims"),
       newsletters: db.collection("newsletters"),
     };
+
+    app.get('/reviews', async (req, res) => {
+  try {
+    const reviews = await collections.reviews.find().sort({ createdAt: -1 }).toArray();
+    res.send(reviews);
+  } catch (err) {
+    res.status(500).send({ message: 'Failed to fetch reviews' });
+  }
+});
     // popular polici
     app.get('/policies/popular', async (req, res) => {
    try {
     const popular = await collections.policies
       .find()
-      .sort({ purchaseCount: -1 }) // sort by popularity
+      .sort({ purchaseCount: -1 }) 
       .limit(6)
       .toArray();
 
@@ -52,6 +61,20 @@ async function run() {
     res.status(500).send({ message: "Failed to fetch popular policies" });
   }
 });
+// blogs
+app.get("/blogs/latest", async (req, res) => {
+  try {
+    const latestBlogs = await collections.blogs
+      .find()
+      .sort({ createdAt: -1 })
+      .limit(4)
+      .toArray();
+    res.send(latestBlogs);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch latest blogs" });
+  }
+});
+
 
     // ----------  Save or Update User ----------
     app.put("/users/:email", async (req, res) => {
