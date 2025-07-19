@@ -74,6 +74,78 @@ app.get("/blogs/latest", async (req, res) => {
     res.status(500).send({ message: "Failed to fetch latest blogs" });
   }
 });
+// get agents api
+app.get('/agents', async (req, res) => {
+  try {
+    const agents = await collections.users
+      .find({ role: 'agent' })
+      .sort({ created_at: -1 }) 
+      .limit(3)
+      .toArray();
+    res.send(agents);
+  } catch (error) {
+    res.status(500).send({ message: 'Failed to fetch agents' });
+  }
+});
+// all polices
+
+app.get('/policies', async (req, res) => {
+  try {
+    const { page = 1, limit = 9, category, search } = req.query;
+
+    const query = {};
+
+    // Filter by category
+    if (category) {
+      query.category = category;
+    }
+
+    // Search by title (case-insensitive)
+    if (search) {
+      query.title = { $regex: search, $options: 'i' };
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const total = await collections.policies.countDocuments(query);
+    const policies = await collections.policies
+      .find(query)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .toArray();
+
+    res.send({
+      total,
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / limit),
+      policies
+    });
+  } catch (err) {
+    res.status(500).send({ message: 'Failed to fetch policies' });
+  }
+});
+
+
+// newsletter collection
+app.post('/newsletter', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).send({ message: "Email is required" });
+    }
+
+    const existing = await collections.newsletters.findOne({ email });
+    if (existing) {
+      return res.status(409).send({ message: "Email already subscribed" });
+    }
+
+    await collections.newsletters.insertOne({ email, createdAt: new Date().toISOString() });
+    res.status(201).send({ message: "Subscribed successfully" });
+  } catch (error) {
+    res.status(500).send({ message: "Failed to subscribe" });
+  }
+});
+
 
 
     // ----------  Save or Update User ----------
