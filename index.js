@@ -64,16 +64,54 @@ async function run() {
 // blogs
 app.get("/blogs/latest", async (req, res) => {
   try {
-    const latestBlogs = await collections.blogs
+    const mostVisitedBlogs = await collections.blogs
       .find()
-      .sort({ createdAt: -1 })
-      .limit(4)
+      .sort({ totalVisit: -1 })  
+      .limit(4)                  
       .toArray();
-    res.send(latestBlogs);
+    res.send(mostVisitedBlogs);
   } catch (error) {
-    res.status(500).send({ message: "Failed to fetch latest blogs" });
+    res.status(500).send({ message: "Failed to fetch most visited blogs" });
   }
 });
+
+// Get all blogs
+app.get('/blogs', async (req, res) => {
+  try {
+    const blogs = await collections.blogs.find().sort({ createdAt: -1 }).toArray();
+    res.send(blogs);
+  } catch (error) {
+    res.status(500).send({ message: 'Failed to fetch blogs' });
+  }
+});
+
+// Get single blog & increment visit count
+app.get("/blogs/:id", async (req, res) => {
+  const { id } = req.params;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "Invalid blog ID" });
+  }
+
+  try {
+    const blog = await collections.blogs.findOne({ _id: new ObjectId(id) });
+
+    if (!blog) {
+      return res.status(404).send({ message: "Blog not found" });
+    }
+
+    await collections.blogs.updateOne(
+      { _id: new ObjectId(id) },
+      { $inc: { totalVisit: 1 } }
+    );
+
+  
+    res.send({ ...blog, totalVisit: blog.totalVisit + 1 });
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch blog" });
+  }
+});
+
 // get agents api
 app.get('/agents', async (req, res) => {
   try {
@@ -124,6 +162,16 @@ app.get('/policies', async (req, res) => {
     res.status(500).send({ message: 'Failed to fetch policies' });
   }
 });
+// polycie details
+app.get("/policies/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const policy = await collections.policies.findOne({ _id: new ObjectId(id) });
+    res.send(policy);
+  } catch {
+    res.status(500).send({ error: "Policy not found" });
+  }
+});
 
 
 // newsletter collection
@@ -143,6 +191,49 @@ app.post('/newsletter', async (req, res) => {
     res.status(201).send({ message: "Subscribed successfully" });
   } catch (error) {
     res.status(500).send({ message: "Failed to subscribe" });
+  }
+});
+// user
+
+  app.post('/users', async (req, res) => {
+  const email = req.body.email;
+  const userExist = await collections.users.findOne({ email });
+
+  if (userExist) {
+    const lastLoginUpdate = await collections.users.updateOne(
+      { email },
+      { $set: { last_login: new Date() } }
+    );
+    return res.send({
+      message: "User already exists, last login updated",
+      inserted: false,
+      lastLoginUpdated: lastLoginUpdate.modifiedCount > 0
+    });
+  }
+
+  const user = {
+    ...req.body,
+    created_at: new Date(),
+    last_login: new Date(), 
+  };
+
+  const result = await collections.users.insertOne(user);
+  res.send(result);
+ });
+//  polciy details application
+app.post('/applications', async (req, res) => {
+  try {
+    const application = {
+      ...req.body,
+      status: 'Pending',
+      
+    };
+
+    const result = await collections.applications.insertOne(application);
+    res.status(201).send(result);
+  } catch (error) {
+    console.error("Error saving application:", error);
+    res.status(500).send({ message: "Failed to submit application" });
   }
 });
 
