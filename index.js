@@ -220,6 +220,11 @@ app.post('/newsletter', async (req, res) => {
   const result = await collections.users.insertOne(user);
   res.send(result);
  });
+//  get application
+ app.get('/applications', async (req, res) => {
+  const data = await collections.applications.find().sort({ appliedAt: -1 }).toArray();
+  res.send(data);
+});
 //  polciy details application
 app.post('/applications', async (req, res) => {
   try {
@@ -235,6 +240,34 @@ app.post('/applications', async (req, res) => {
     console.error("Error saving application:", error);
     res.status(500).send({ message: "Failed to submit application" });
   }
+});
+// PATCH: reject application
+app.patch('/applications/reject/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "Invalid ID" });
+  }
+
+  const result = await collections.applications.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { status: "Rejected" } }
+  );
+  res.send(result);
+});
+
+app.patch('/applications/assign/:id', async (req, res) => {
+  const { id } = req.params;
+  const { agent } = req.body;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "Invalid ID" });
+  }
+
+  const result = await collections.applications.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { status: "Approved", assignedAgent: agent } }
+  );
+  res.send(result);
 });
 
 
@@ -253,11 +286,29 @@ app.post('/applications', async (req, res) => {
     });
 
     // ----------  Get User Role ----------
-    app.get("/users/role/:email", async (req, res) => {
-      const email = req.params.email;
-      const user = await collections.users.findOne({ email });
-      res.send({ role: user?.role || "customer" });
+ 
+app.get("/users/role/:email", async (req, res) => {
+  const email = req.params.email;
+  if (!email) {
+    return res.status(400).send({ message: "Email is required" });
+  }
+
+  try {
+    // Case-insensitive email match to ensure consistency
+    const user = await collections.users.findOne({
+      email: email,
     });
+
+    if (!user) {
+      return res.status(404).send({ message: "User not found" });
+    }
+
+    res.send({ role: user.role || "customer" });
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch user role" });
+  }
+});
+
 
     // ----------  Sample Public Route ----------
     app.get("/", (req, res) => {
