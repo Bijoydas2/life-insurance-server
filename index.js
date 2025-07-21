@@ -162,6 +162,75 @@ app.get('/policies', async (req, res) => {
     res.status(500).send({ message: 'Failed to fetch policies' });
   }
 });
+// admin all policy
+app.get('/admin/policies', async (req, res) => {
+  try {
+    const policies = await collections.policies.find().toArray();
+    res.send(policies);
+  } catch (err) {
+    console.error("Error fetching all policies:", err.message);
+    res.status(500).send({ message: 'Failed to fetch policies' });
+  }
+});
+
+// Add new policy
+app.post('/policies', async (req, res) => {
+  try {
+    const policy = req.body; // validate fields on your own
+    const result = await collections.policies.insertOne(policy);
+    res.status(201).send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to add policy" });
+  }
+});
+
+// Update policy
+app.put('/policies/:id', async (req, res) => {
+  const { id } = req.params;
+  const updatedPolicy = req.body;
+
+  try {
+    const result = await collections.policies.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: {
+          title: updatedPolicy.title,
+          category: updatedPolicy.category,
+          description: updatedPolicy.description,
+          minAge: updatedPolicy.minAge,
+          maxAge: updatedPolicy.maxAge,
+          basePremium: updatedPolicy.basePremium,
+          image: updatedPolicy.image,
+          coverageRange: updatedPolicy.coverageRange,
+          durationOptions: updatedPolicy.durationOptions || [],
+          eligibility: updatedPolicy.eligibility || [],
+          benefits: updatedPolicy.benefits || [],
+          premiumLogic: updatedPolicy.premiumLogic || "",
+          updatedAt: new Date(),
+        }
+      }
+    );
+
+    res.send(result);
+  } catch (error) {
+    console.error("Update error:", error);
+    res.status(500).send({ message: "Failed to update policy" });
+  }
+});
+
+
+// Delete policy
+app.delete('/policies/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!ObjectId.isValid(id)) return res.status(400).send({ message: "Invalid ID" });
+
+  try {
+    const result = await collections.policies.deleteOne({ _id: new ObjectId(id) });
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to delete policy" });
+  }
+});
+
 // polycie details
 app.get("/policies/:id", async (req, res) => {
   const { id } = req.params;
