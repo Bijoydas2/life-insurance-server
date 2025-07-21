@@ -194,6 +194,47 @@ app.post('/newsletter', async (req, res) => {
   }
 });
 // user
+    app.get('/users', async (req, res) => {
+      try {
+        const { role } = req.query;
+        const query = role ? { role } : {};
+        const users = await collections.users.find(query).sort({ created_at: -1 }).toArray();
+        res.send(users);
+      } catch (error) {
+        res.status(500).send({ message: 'Failed to fetch users' });
+      }
+    });
+    // Promote customer to agent by email
+app.patch('/users/promote/:email', async (req, res) => {
+  const email = req.params.email;
+  if (!email) return res.status(400).send({ message: "Email is required" });
+
+  try {
+    const result = await collections.users.updateOne(
+      { email: email.toLowerCase(), role: "customer" },
+      { $set: { role: "agent" } }
+    );
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to promote user" });
+  }
+});
+
+// Demote agent to customer by email
+app.patch('/users/demote/:email', async (req, res) => {
+  const email = req.params.email;
+  if (!email) return res.status(400).send({ message: "Email is required" });
+
+  try {
+    const result = await collections.users.updateOne(
+      { email: email.toLowerCase(), role: "agent" },
+      { $set: { role: "customer" } }
+    );
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to demote user" });
+  }
+});
 
   app.post('/users', async (req, res) => {
   const email = req.body.email;
@@ -220,6 +261,18 @@ app.post('/newsletter', async (req, res) => {
   const result = await collections.users.insertOne(user);
   res.send(result);
  });
+ // Delete user by email (optional)
+app.delete('/users/:email', async (req, res) => {
+  const email = req.params.email;
+  if (!email) return res.status(400).send({ message: "Email is required" });
+
+  try {
+    const result = await collections.users.deleteOne({ email: email.toLowerCase() });
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to delete user" });
+  }
+});
 //  get application
  app.get('/applications', async (req, res) => {
   const data = await collections.applications.find().sort({ appliedAt: -1 }).toArray();
