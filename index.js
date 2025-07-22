@@ -347,7 +347,28 @@ app.delete('/users/:email', async (req, res) => {
   const data = await collections.applications.find().sort({ appliedAt: -1 }).toArray();
   res.send(data);
 });
-//  polciy details application
+// GET: Get applications assigned to a specific agent
+app.get('/applications/assigned', async (req, res) => {
+  const agentEmail = req.query.email;
+
+  if (!agentEmail) {
+    return res.status(400).send({ message: "Agent email is required" });
+  }
+
+  try {
+    const applications = await collections.applications
+      .find({ assignedAgent: agentEmail })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(applications);
+  } catch (err) {
+    console.error("Error fetching assigned applications:", err.message);
+    res.status(500).send({ message: "Failed to fetch assigned applications" });
+  }
+});
+
+//  policy details application
 app.post('/applications', async (req, res) => {
   try {
     const application = {
@@ -363,6 +384,36 @@ app.post('/applications', async (req, res) => {
     res.status(500).send({ message: "Failed to submit application" });
   }
 });
+// PATCH: Update application status (Agent panel)
+app.patch('/applications/status/:id', async (req, res) => {
+  const { id } = req.params;
+  const { newStatus, policyId } = req.body;
+
+  if (!ObjectId.isValid(id) || !newStatus) {
+    return res.status(400).send({ message: "Invalid ID or status" });
+  }
+
+  try {
+    const updateAppResult = await collections.applications.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: newStatus } }
+    );
+
+    // ✅ If approved, increase policy purchase count
+    if (newStatus === "Approved" && policyId) {
+      await collections.policies.updateOne(
+        { _id: new ObjectId(policyId) },
+        { $inc: { purchaseCount: 1 } }
+      );
+    }
+
+    res.send(updateAppResult);
+  } catch (error) {
+    console.error("Failed to update status:", error.message);
+    res.status(500).send({ message: "Failed to update application status" });
+  }
+});
+
 // PATCH: reject application
 app.patch('/applications/reject/:id', async (req, res) => {
   const { id } = req.params;
