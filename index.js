@@ -463,6 +463,47 @@ app.delete('/users/:email', async (req, res) => {
     res.status(500).send({ message: "Failed to delete user" });
   }
 });
+// customer  applied policy
+app.get('/applications/customer', async (req, res) => {
+  const { email } = req.query;
+  const result = await collections.applications.find({ email: email }).toArray();
+  res.send(result);
+});
+// POST /reviews
+
+
+app.post('/reviews', async (req, res) => {
+  try {
+    const { policyId, rating, feedback, customerName, customerEmail } = req.body;
+
+    if (!policyId || !rating) {
+      return res.status(400).send({ error: 'policyId and rating are required' });
+    }
+
+
+    await collections.reviews.insertOne({
+      policyId: new ObjectId(policyId),
+      rating: Number(rating),
+      feedback,
+      customerName,
+      customerEmail,
+      createdAt: new Date()
+    });
+
+   
+    await collections.policies.updateOne(
+      { _id: new ObjectId(policyId) },
+      { $set: { rating: Number(rating) } }
+    );
+
+    res.send({ message: 'Review saved and rating updated' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ error: 'Server error' });
+  }
+});
+
+
 //  get application
  app.get('/applications', async (req, res) => {
   const data = await collections.applications.find().sort({ appliedAt: -1 }).toArray();
@@ -581,27 +622,28 @@ app.patch('/applications/assign/:id', async (req, res) => {
 
     // ----------  Get User Role ----------
  
-app.get("/users/role/:email", async (req, res) => {
-  const email = req.params.email;
-  if (!email) {
-    return res.status(400).send({ message: "Email is required" });
-  }
+        app.get('/users/:email/role', async (req, res) => {
+            try {
+                const email = req.params.email;
 
-  try {
-    // Case-insensitive email match to ensure consistency
-    const user = await collections.users.findOne({
-      email: email,
-    });
+                if (!email) {
+                    return res.status(400).send({ message: 'Email is required' });
+                }
 
-    if (!user) {
-      return res.status(404).send({ message: "User not found" });
-    }
+                const user = await collections.users.findOne({ email });
 
-    res.send({ role: user.role || "customer" });
-  } catch (error) {
-    res.status(500).send({ message: "Failed to fetch user role" });
-  }
-});
+                if (!user) {
+                    return res.status(404).send({ message: 'User not found' });
+                }
+
+                res.send({ role: user.role || 'customer' });
+            } catch (error) {
+                console.error('Error getting user role:', error);
+                res.status(500).send({ message: 'Failed to get role' });
+            }
+        });
+
+
 
 
     // ----------  Sample Public Route ----------
