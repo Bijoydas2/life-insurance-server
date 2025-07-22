@@ -77,6 +77,7 @@ app.get("/blogs/latest", async (req, res) => {
 
 // Get all blogs
 app.get('/blogs', async (req, res) => {
+
   try {
     const blogs = await collections.blogs.find().sort({ createdAt: -1 }).toArray();
     res.send(blogs);
@@ -85,10 +86,41 @@ app.get('/blogs', async (req, res) => {
   }
 });
 
+app.get('/blogs/manage', async (req, res) => {
+  const { email, role } = req.query;
+
+  if (!email || !role) {
+    return res.status(400).send({ message: "Email and role are required" });
+  }
+
+  try {
+    let query = {};
+    if (role !== "admin") {
+      
+      query = { authorEmail: email.toLowerCase() };
+    }
+
+    const blogs = await collections.blogs.find(query).sort({ createdAt: -1 }).toArray();
+
+  
+    const normalizedBlogs = blogs.map(blog => ({
+      ...blog,
+      _id: blog._id.toString(),
+      totalVisit: blog.totalVisit || 0
+    }));
+
+    res.send(normalizedBlogs);
+  } catch (error) {
+    console.error("Error fetching blogs:", error);
+    res.status(500).send({ message: "Failed to fetch blogs" });
+  }
+});
+
+
 // Get single blog & increment visit count
 app.get("/blogs/:id", async (req, res) => {
   const { id } = req.params;
-
+  
   if (!ObjectId.isValid(id)) {
     return res.status(400).send({ message: "Invalid blog ID" });
   }
@@ -111,6 +143,95 @@ app.get("/blogs/:id", async (req, res) => {
     res.status(500).send({ message: "Failed to fetch blog" });
   }
 });
+
+
+
+// POST create new blog
+app.post('/blogs', async (req, res) => {
+  try {
+    const { title, details, image, author, authorProfile, authorEmail } = req.body;
+
+    if (!title || !details || !author || !authorEmail) {
+      return res.status(400).send({ message: "Missing required fields" });
+    }
+
+    const newBlog = {
+      title,
+      details,
+      image: image || null,
+      author,
+      authorProfile: authorProfile || null,
+      authorEmail: authorEmail.toLowerCase(),
+      createdAt: new Date(),
+      totalVisit: 0,
+    };
+
+    const result = await collections.blogs.insertOne(newBlog);
+    res.status(201).send(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: "Failed to create blog" });
+  }
+});
+
+app.patch('/blogs/:id', async (req, res) => {
+  const { id } = req.params;
+  const { title, details, image, authorProfile } = req.body;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid blog ID" });
+  }
+
+  if (!title || !details) {
+    return res.status(400).json({ message: "Title and details are required" });
+  }
+
+  try {
+    const updateDoc = {
+      $set: {
+        title,
+        details,
+        image,
+        authorProfile,
+        updatedAt: new Date()
+      }
+    };
+
+    const result = await collections.blogs.updateOne(
+      { _id: new ObjectId(id) },
+      updateDoc
+    );
+
+    if (!result.matchedCount) {
+      return res.status(404).json({ message: "Blog not found" });
+    }
+
+    res.json({ message: "Blog updated successfully" });
+  } catch (error) {
+    console.error("Update blog error:", error);
+    res.status(500).json({ message: "Failed to update blog" });
+  }
+});
+
+
+// DELETE blog by ID
+app.delete('/blogs/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid blog ID' });
+    }
+    const result = await collections.blogs.deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount === 1) {
+      return res.status(200).json({ deletedCount: 1 });
+    }
+    res.status(404).json({ deletedCount: 0, message: 'Blog not found' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ deletedCount: 0, message: 'Internal server error' });
+  }
+});
+
 
 // get agents api
 app.get('/agents', async (req, res) => {
