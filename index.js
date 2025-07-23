@@ -47,6 +47,17 @@ async function run() {
     res.status(500).send({ message: 'Failed to fetch reviews' });
   }
 });
+// claims 
+app.get("/claims", async (req, res) => {
+  const email = req.query.email;
+  const result = await collections.claims.find({ userEmail: email }).toArray();
+  res.send(result);
+});
+ app.post("/claims", async (req, res) => {
+  const claim = req.body;
+  const result = await collections.claims.insertOne(claim);
+  res.send(result); 
+ });
     // popular polici
     app.get('/policies/popular', async (req, res) => {
    try {
