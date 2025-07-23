@@ -1,8 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
+const stripe = require("stripe")(process.env.PAYMENT_GATEWAY_KEY);
 const { MongoClient, ObjectId, ServerApiVersion } = require("mongodb");
-
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -504,6 +504,7 @@ app.post('/reviews', async (req, res) => {
 });
 
 
+
 //  get application
  app.get('/applications', async (req, res) => {
   const data = await collections.applications.find().sort({ appliedAt: -1 }).toArray();
@@ -529,6 +530,16 @@ app.get('/applications/assigned', async (req, res) => {
     res.status(500).send({ message: "Failed to fetch assigned applications" });
   }
 });
+// approved application
+// Express.js route
+app.get('/applications/approved', async (req, res) => {
+  const email = req.query.email;
+  const query = { email: email, status: "Approved" };
+  const result = await collections.applications.find(query).toArray();
+  res.send(result);
+});
+
+
 
 //  policy details application
 app.post('/applications', async (req, res) => {
@@ -642,6 +653,62 @@ app.patch('/applications/assign/:id', async (req, res) => {
                 res.status(500).send({ message: 'Failed to get role' });
             }
         });
+
+  app.post('/create-payment-intent', async (req, res) => {
+  try {
+    const { amount } = req.body;
+    if (!amount) {
+      return res.status(400).send({ message: "Amount is required" });
+    }
+
+    const amountInCents = Math.round(amount * 100); // Convert to cents
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountInCents,
+      currency: 'usd',
+      payment_method_types: ['card'],
+    });
+
+    res.json({ clientSecret: paymentIntent.client_secret });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+app.post('/payments', async (req, res) => {
+  try {
+    const payment = {
+      ...req.body,
+      createdAt: new Date(),
+    };
+
+    const result = await collections.transactions.insertOne(payment);
+    res.status(201).send(result);
+  } catch (error) {
+    console.error("Error saving payment:", error.message);
+    res.status(500).send({ message: "Failed to save payment" });
+  }
+});
+
+app.patch('/applications/:id', async (req, res) => {
+  const { id } = req.params;
+  const { paymentStatus } = req.body;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "Invalid application ID" });
+  }
+
+  try {
+    const result = await collections.applications.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { paymentStatus } }
+    );
+    res.send(result);
+  } catch (error) {
+    console.error("Error updating application:", error.message);
+    res.status(500).send({ message: "Failed to update payment status" });
+  }
+});
+
 
 
 
