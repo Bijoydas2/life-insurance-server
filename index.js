@@ -726,6 +726,41 @@ app.patch('/applications/assign/:id', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+ 
+app.get('/transactions', async (req, res) => {
+  const { from, to, user, policy } = req.query;
+  const query = {};
+
+  if (from && to) {
+    query.date = {
+      $gte: new Date(from),
+      $lte: new Date(to),
+    };
+  }
+  if (user) {
+    query.email = { $regex: user, $options: 'i' };
+  }
+
+  if (policy) {
+    query.policyName = { $regex: policy, $options: 'i' };
+  }
+
+  try {
+    const transactions = await collections.transactions
+      .find(query)
+      .sort({ date: -1 })
+      .toArray();
+
+   
+    const totalIncome = transactions.reduce((acc, t) => acc + (t.amount || 0), 0);
+
+    res.json({ transactions, totalIncome });
+  } catch (error) {
+    console.error('Failed to fetch transactions:', error);
+    res.status(500).json({ message: 'Failed to fetch transactions' });
+  }
+});
+
 app.post('/payments', async (req, res) => {
   try {
     const payment = {
