@@ -47,6 +47,16 @@ async function run() {
     res.status(500).send({ message: 'Failed to fetch reviews' });
   }
 });
+// GET /claims/all -
+app.get("/claims/all", async (req, res) => {
+  try {
+    const claims = await collections.claims.find().sort({ claimDate: -1 }).toArray();
+    res.send(claims);
+  } catch (error) {
+    console.error("Failed to fetch all claims:", error);
+    res.status(500).send({ message: "Failed to fetch claims" });
+  }
+});
 // claims 
 app.get("/claims", async (req, res) => {
   const email = req.query.email;
@@ -58,6 +68,37 @@ app.get("/claims", async (req, res) => {
   const result = await collections.claims.insertOne(claim);
   res.send(result); 
  });
+// Update claim status (approve)
+app.patch('/claims/:id', async (req, res) => {
+  const { id } = req.params;
+  const { newStatus } = req.body;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "Invalid claim ID" });
+  }
+
+  if (!newStatus) {
+    return res.status(400).send({ message: "New status is required" });
+  }
+
+  try {
+    const result = await collections.claims.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: newStatus } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ message: "Claim not found" });
+    }
+
+    res.send(result);
+  } catch (error) {
+    console.error("Failed to update claim status:", error);
+    res.status(500).send({ message: "Failed to update claim status" });
+  }
+});
+
+
     // popular polici
     app.get('/policies/popular', async (req, res) => {
    try {
