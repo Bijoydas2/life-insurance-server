@@ -436,16 +436,44 @@ app.post('/newsletter', async (req, res) => {
   }
 });
 // user
-    app.get('/users', async (req, res) => {
-      try {
-        const { role } = req.query;
-        const query = role ? { role } : {};
-        const users = await collections.users.find(query).sort({ created_at: -1 }).toArray();
-        res.send(users);
-      } catch (error) {
-        res.status(500).send({ message: 'Failed to fetch users' });
-      }
-    });
+app.get('/users/profile', async (req, res) => {
+  const email = req.query.email;
+  if (!email) return res.status(400).send({ error: "Email is required" });
+
+  const user = await collections.users.findOne({ email });
+  res.send(user);
+});
+// PATCH /users/:email
+app.patch("/users/:email", async (req, res) => {
+  try {
+    const email = req.params.email;
+    const { name, photoURL } = req.body;
+
+    const updateDoc = {};
+    if (name) updateDoc.name = name;
+    if (photoURL) updateDoc.photoURL = photoURL;
+
+    if (Object.keys(updateDoc).length === 0) {
+      return res.status(400).send({ error: "No valid fields to update" });
+    }
+
+    const result = await collections.users.updateOne(
+      { email },
+      { $set: updateDoc }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ error: "User not found" });
+    }
+
+    res.send({ message: "User updated", result });
+  } catch (error) {
+    console.error("Update error:", error);
+    res.status(500).send({ error: "Internal server error" });
+  }
+});
+
+
     // Promote customer to agent by email
 app.patch('/users/promote/:email', async (req, res) => {
   const email = req.params.email;
