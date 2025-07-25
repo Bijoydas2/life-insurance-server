@@ -71,7 +71,7 @@ app.get("/claims", async (req, res) => {
 // Update claim status (approve)
 app.patch('/claims/:id', async (req, res) => {
   const { id } = req.params;
-  const { newStatus } = req.body;
+  const { newStatus,agentEmail} = req.body;
 
   if (!ObjectId.isValid(id)) {
     return res.status(400).send({ message: "Invalid claim ID" });
@@ -84,7 +84,12 @@ app.patch('/claims/:id', async (req, res) => {
   try {
     const result = await collections.claims.updateOne(
       { _id: new ObjectId(id) },
-      { $set: { status: newStatus } }
+         {
+        $set: {
+          status: newStatus,
+          assignedAgent: agentEmail, 
+        },
+      }
     );
 
     if (result.matchedCount === 0) {
@@ -117,6 +122,37 @@ app.get('/admin/summary', async (req, res) => {
     userRoleCounts,
   });
 });
+
+// Express route example
+app.get('/dashboard/agent-summary/:email', async (req, res) => {
+  const agentEmail = req.params.email;
+
+  try {
+    const assignedCustomersCount = await collections.applications.countDocuments({
+      assignedAgent: agentEmail,
+    });
+
+    const clearanceRequestsCount = await collections.claims.countDocuments({
+      assignedAgent: agentEmail,
+    });
+
+    const blogsCount = await collections.blogs.countDocuments({
+      authorEmail: agentEmail,
+    });
+
+    res.json({
+      assignedCustomersCount,
+      clearanceRequestsCount,
+      blogsCount,
+    });
+  } catch (error) {
+    console.error('Agent Summary Error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+
 
     // popular polici
     app.get('/policies/popular', async (req, res) => {
@@ -455,7 +491,7 @@ app.post('/newsletter', async (req, res) => {
     res.status(500).send({ message: "Failed to subscribe" });
   }
 });
-// user
+
 // Get all users
 app.get('/users', async (req, res) => {
   try {
