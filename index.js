@@ -98,6 +98,25 @@ app.patch('/claims/:id', async (req, res) => {
   }
 });
 
+// admin home
+app.get('/admin/summary', async (req, res) => {
+  const totalPolicies = await collections.policies.countDocuments();
+  const totalBlogs = await collections.blogs.countDocuments();
+  const totalApplications = await collections.applications.countDocuments();
+
+  const usersPipeline = [
+    { $group: { _id: '$role', count: { $sum: 1 } } },
+    { $project: { role: '$_id', count: 1, _id: 0 } },
+  ];
+  const userRoleCounts = await collections.users.aggregate(usersPipeline).toArray();
+
+  res.send({
+    totalPolicies,
+    totalBlogs,
+    totalApplications,
+    userRoleCounts,
+  });
+});
 
     // popular polici
     app.get('/policies/popular', async (req, res) => {
@@ -126,6 +145,7 @@ app.get("/blogs/latest", async (req, res) => {
     res.status(500).send({ message: "Failed to fetch most visited blogs" });
   }
 });
+
 
 // Get all blogs
 app.get('/blogs', async (req, res) => {
@@ -436,6 +456,17 @@ app.post('/newsletter', async (req, res) => {
   }
 });
 // user
+// Get all users
+app.get('/users', async (req, res) => {
+  try {
+    const users = await collections.users.find().toArray();
+    res.send(users);
+  } catch (error) {
+    console.error("Failed to fetch users:", error);
+    res.status(500).send({ message: "Internal server error" });
+  }
+});
+
 app.get('/users/profile', async (req, res) => {
   const email = req.query.email;
   if (!email) return res.status(400).send({ error: "Email is required" });
