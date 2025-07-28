@@ -4,11 +4,35 @@ require("dotenv").config();
 const stripe = require("stripe")(process.env.PAYMENT_GATEWAY_KEY);
 const { MongoClient, ObjectId, ServerApiVersion } = require("mongodb");
 const app = express();
+const jwt =require('jsonwebtoken');
+const cookieParser = require('cookie-parser')
 const port = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin:['http://localhost:5173'],
+  credentials:true
+}));
+
 app.use(express.json());
+app.use(cookieParser())
+
+//  verify token
+
+const verifyToken = (req,res,next)=>{
+  const token = req.cookies?.token;
+   if (!token) {
+    return res.status(401).send({ message: 'Unauthorized: No token' });
+   }
+     jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).send({ message: 'Forbidden: Invalid token' });
+    }
+
+    req.decoded = decoded; 
+    next();
+  });
+}
 
 // MongoDB connection URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.uevarui.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -27,7 +51,7 @@ async function run() {
     const db = client.db("insuranceDB");
 
 
-    // ✅ Grouped Collections
+   
     const collections = {
       users: db.collection("users"),
       policies: db.collection("policies"),
@@ -38,17 +62,57 @@ async function run() {
       claims: db.collection("claims"),
       newsletters: db.collection("newsletters"),
     };
+    
+  app.post('/jwt', async (req, res) => {
+  const userData = req.body;
 
-    app.get('/reviews', async (req, res) => {
+  const token = jwt.sign(userData, process.env.JWT_ACCESS_SECRET, {
+    expiresIn: process.env.EXP_IN
+  });
+
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: false 
+  });
+
+  res.send({ success: true });
+});
+
+const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const user = await collections.users.findOne({ email });
+      if (!user || user.role !== 'admin') {
+        return res.status(403).send({ message: 'forbidden access' });
+      }
+      next();
+    };
+const verifyAgent = async (req, res, next) => {
+      const email = req.decoded.email;
+      const user = await collections.users.findOne({ email });
+      if (!user || user.role !== 'agent') {
+        return res.status(403).send({ message: 'forbidden access' });
+      }
+      next();
+    };
+
+ app.post('/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: false, 
+   
+  });
+  res.send({ success: true });
+});
+  app.get('/reviews', async (req, res) => {
   try {
-    const reviews = await collections.reviews.find().sort({ createdAt: -1 }).toArray();
+    const reviews = await collections.reviews.find().sort({ createdAt: -1 }).limit(5).toArray();
     res.send(reviews);
   } catch (err) {
     res.status(500).send({ message: 'Failed to fetch reviews' });
   }
 });
 // GET /claims/all -
-app.get("/claims/all", async (req, res) => {
+app.get("/claims/all",verifyToken,verifyAgent, async (req, res) => {
   try {
     const claims = await collections.claims.find().sort({ claimDate: -1 }).toArray();
     res.send(claims);
@@ -63,13 +127,13 @@ app.get("/claims", async (req, res) => {
   const result = await collections.claims.find({ userEmail: email }).toArray();
   res.send(result);
 });
- app.post("/claims", async (req, res) => {
+ app.post("/claims",verifyToken, async (req, res) => {
   const claim = req.body;
   const result = await collections.claims.insertOne(claim);
   res.send(result); 
  });
 // Update claim status (approve)
-app.patch('/claims/:id', async (req, res) => {
+app.patch('/claims/:id',verifyToken,verifyAgent, async (req, res) => {
   const { id } = req.params;
   const { newStatus,agentEmail} = req.body;
 
@@ -104,7 +168,7 @@ app.patch('/claims/:id', async (req, res) => {
 });
 
 // admin home
-app.get('/admin/summary', async (req, res) => {
+app.get('/admin/summary',verifyToken,verifyAdmin, async (req, res) => {
   const totalPolicies = await collections.policies.countDocuments();
   const totalBlogs = await collections.blogs.countDocuments();
   const totalApplications = await collections.applications.countDocuments();
@@ -124,7 +188,7 @@ app.get('/admin/summary', async (req, res) => {
 });
 
 // Express route example
-app.get('/dashboard/agent-summary/:email', async (req, res) => {
+app.get('/dashboard/agent-summary/:email',verifyToken,verifyAgent, async (req, res) => {
   const agentEmail = req.params.email;
 
   try {
@@ -151,11 +215,31 @@ app.get('/dashboard/agent-summary/:email', async (req, res) => {
   }
 });
 
+app.get('/applications/summary',verifyToken, async (req, res) => {
+
+  const email = req.query.email;
+  if (!email) {
+    return res.status(400).send({ error: 'Email is required' });
+  }
+
+  try {
+    const total = await collections.applications.countDocuments({ email });
+    const approved = await collections.applications.countDocuments({ email, status: 'Approved' });
+    const pending = await collections.applications.countDocuments({ email, status: 'Pending' });
+    const rejected = await collections.applications.countDocuments({ email, status: 'Rejected' });
+    const paymentsDue = await collections.applications.countDocuments({ email, status: 'Due' });
+
+    res.send({ total, approved, pending, rejected, paymentsDue });
+  } catch (error) {
+    res.status(500).send({ error: 'Internal Server Error' });
+  }
+});
+
 
 
 
     // popular polici
-    app.get('/policies/popular', async (req, res) => {
+    app.get('/policies/popular',  async (req, res) => {
    try {
     const popular = await collections.policies
       .find()
@@ -194,7 +278,7 @@ app.get('/blogs', async (req, res) => {
   }
 });
 
-app.get('/blogs/manage', async (req, res) => {
+app.get('/blogs/manage',verifyToken, async (req, res) => {
   const { email, role } = req.query;
 
   if (!email || !role) {
@@ -226,7 +310,7 @@ app.get('/blogs/manage', async (req, res) => {
 
 
 // Get single blog & increment visit count
-app.get("/blogs/:id", async (req, res) => {
+app.get("/blogs/:id",verifyToken, async (req, res) => {
   const { id } = req.params;
   
   if (!ObjectId.isValid(id)) {
@@ -255,7 +339,7 @@ app.get("/blogs/:id", async (req, res) => {
 
 
 // POST create new blog
-app.post('/blogs', async (req, res) => {
+app.post('/blogs',verifyToken, async (req, res) => {
   try {
     const { title, details, image, author, authorProfile, authorEmail } = req.body;
 
@@ -282,7 +366,7 @@ app.post('/blogs', async (req, res) => {
   }
 });
 
-app.patch('/blogs/:id', async (req, res) => {
+app.patch('/blogs/:id',verifyToken, async (req, res) => {
   const { id } = req.params;
   const { title, details, image, authorProfile } = req.body;
 
@@ -357,9 +441,11 @@ app.get('/agents', async (req, res) => {
 // all polices
 
 app.get('/policies', async (req, res) => {
+
+  
   try {
     const { page = 1, limit = 9, category, search } = req.query;
-
+     
     const query = {};
 
     // Filter by category
@@ -392,7 +478,7 @@ app.get('/policies', async (req, res) => {
   }
 });
 // admin all policy
-app.get('/admin/policies', async (req, res) => {
+app.get('/admin/policies',verifyToken,verifyAdmin, async (req, res) => {
   try {
     const policies = await collections.policies.find().toArray();
     res.send(policies);
@@ -403,7 +489,7 @@ app.get('/admin/policies', async (req, res) => {
 });
 
 // Add new policy
-app.post('/policies', async (req, res) => {
+app.post('/policies',verifyToken,verifyAdmin, async (req, res) => {
   try {
     const policy = req.body; // validate fields on your own
     const result = await collections.policies.insertOne(policy);
@@ -414,7 +500,7 @@ app.post('/policies', async (req, res) => {
 });
 
 // Update policy
-app.put('/policies/:id', async (req, res) => {
+app.put('/policies/:id',verifyToken,verifyAdmin,  async (req, res) => {
   const { id } = req.params;
   const updatedPolicy = req.body;
 
@@ -448,7 +534,7 @@ app.put('/policies/:id', async (req, res) => {
 
 
 // Delete policy
-app.delete('/policies/:id', async (req, res) => {
+app.delete('/policies/:id',verifyToken,verifyAdmin, async (req, res) => {
   const { id } = req.params;
   if (!ObjectId.isValid(id)) return res.status(400).send({ message: "Invalid ID" });
 
@@ -473,7 +559,7 @@ app.get("/policies/:id", async (req, res) => {
 
 
 // newsletter collection
-app.post('/newsletter', async (req, res) => {
+app.post('/newsletter',verifyToken, async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) {
@@ -493,7 +579,7 @@ app.post('/newsletter', async (req, res) => {
 });
 
 // Get all users
-app.get('/users', async (req, res) => {
+app.get('/users',verifyToken, async (req, res) => {
   try {
     const users = await collections.users.find().toArray();
     res.send(users);
@@ -503,7 +589,7 @@ app.get('/users', async (req, res) => {
   }
 });
 
-app.get('/users/profile', async (req, res) => {
+app.get('/users/profile',verifyToken, async (req, res) => {
   const email = req.query.email;
   if (!email) return res.status(400).send({ error: "Email is required" });
 
@@ -511,7 +597,7 @@ app.get('/users/profile', async (req, res) => {
   res.send(user);
 });
 // PATCH /users/:email
-app.patch("/users/:email", async (req, res) => {
+app.patch("/users/:email",verifyToken, async (req, res) => {
   try {
     const email = req.params.email;
     const { name, photoURL } = req.body;
@@ -542,7 +628,7 @@ app.patch("/users/:email", async (req, res) => {
 
 
     // Promote customer to agent by email
-app.patch('/users/promote/:email', async (req, res) => {
+app.patch('/users/promote/:email',verifyToken,verifyAdmin, async (req, res) => {
   const email = req.params.email;
   if (!email) return res.status(400).send({ message: "Email is required" });
 
@@ -558,7 +644,7 @@ app.patch('/users/promote/:email', async (req, res) => {
 });
 
 // Demote agent to customer by email
-app.patch('/users/demote/:email', async (req, res) => {
+app.patch('/users/demote/:email',verifyToken,verifyAdmin, async (req, res) => {
   const email = req.params.email;
   if (!email) return res.status(400).send({ message: "Email is required" });
 
@@ -599,7 +685,7 @@ app.patch('/users/demote/:email', async (req, res) => {
   res.send(result);
  });
  // Delete user by email (optional)
-app.delete('/users/:email', async (req, res) => {
+app.delete('/users/:email',verifyToken,verifyAdmin, async (req, res) => {
   const email = req.params.email;
   if (!email) return res.status(400).send({ message: "Email is required" });
 
@@ -611,7 +697,7 @@ app.delete('/users/:email', async (req, res) => {
   }
 });
 // customer  applied policy
-app.get('/applications/customer', async (req, res) => {
+app.get('/applications/customer',verifyToken, async (req, res) => {
   const { email } = req.query;
   const result = await collections.applications.find({ email: email }).toArray();
   res.send(result);
@@ -619,7 +705,7 @@ app.get('/applications/customer', async (req, res) => {
 // POST /reviews
 
 
-app.post('/reviews', async (req, res) => {
+app.post('/reviews',verifyToken, async (req, res) => {
   try {
     const { policyId, rating, feedback, customerName, customerEmail } = req.body;
 
@@ -653,12 +739,12 @@ app.post('/reviews', async (req, res) => {
 
 
 //  get application
- app.get('/applications', async (req, res) => {
+ app.get('/applications',verifyToken,verifyAdmin, async (req, res) => {
   const data = await collections.applications.find().sort({ appliedAt: -1 }).toArray();
   res.send(data);
 });
 // GET: Get applications assigned to a specific agent
-app.get('/applications/assigned', async (req, res) => {
+app.get('/applications/assigned',verifyToken,verifyAgent, async (req, res) => {
   const agentEmail = req.query.email;
 
   if (!agentEmail) {
@@ -679,7 +765,7 @@ app.get('/applications/assigned', async (req, res) => {
 });
 // approved application
 // Express.js route
-app.get('/applications/approved', async (req, res) => {
+app.get('/applications/approved',verifyToken, async (req, res) => {
   const email = req.query.email;
   const query = { email: email, status: "Approved" };
   const result = await collections.applications.find(query).toArray();
@@ -705,7 +791,7 @@ app.post('/applications', async (req, res) => {
   }
 });
 // PATCH: Update application status (Agent panel)
-app.patch('/applications/status/:id', async (req, res) => {
+app.patch('/applications/status/:id',verifyToken,verifyAgent, async (req, res) => {
   const { id } = req.params;
   const { newStatus, policyId } = req.body;
 
@@ -735,7 +821,7 @@ app.patch('/applications/status/:id', async (req, res) => {
 });
 
 // PATCH: reject application
-app.patch('/applications/reject/:id', async (req, res) => {
+app.patch('/applications/reject/:id',verifyToken,verifyAdmin, async (req, res) => {
   const { id } = req.params;
   if (!ObjectId.isValid(id)) {
     return res.status(400).send({ message: "Invalid ID" });
@@ -748,7 +834,7 @@ app.patch('/applications/reject/:id', async (req, res) => {
   res.send(result);
 });
 
-app.patch('/applications/assign/:id', async (req, res) => {
+app.patch('/applications/assign/:id',verifyToken,verifyAdmin, async (req, res) => {
   const { id } = req.params;
   const { agent } = req.body;
 
@@ -780,7 +866,7 @@ app.patch('/applications/assign/:id', async (req, res) => {
 
     // ----------  Get User Role ----------
  
-        app.get('/users/:email/role', async (req, res) => {
+   app.get('/users/:email/role', async (req, res) => {
             try {
                 const email = req.params.email;
 
@@ -801,7 +887,7 @@ app.patch('/applications/assign/:id', async (req, res) => {
             }
         });
 
-  app.post('/create-payment-intent', async (req, res) => {
+  app.post('/create-payment-intent',verifyToken, async (req, res) => {
   try {
     const { amount } = req.body;
     if (!amount) {
@@ -856,7 +942,7 @@ app.get('/transactions', async (req, res) => {
   }
 });
 
-app.post('/payments', async (req, res) => {
+app.post('/payments',verifyToken, async (req, res) => {
   try {
     const payment = {
       ...req.body,
@@ -871,7 +957,7 @@ app.post('/payments', async (req, res) => {
   }
 });
 
-app.patch('/applications/:id', async (req, res) => {
+app.patch('/applications/:id',verifyToken, async (req, res) => {
   const { id } = req.params;
   const { paymentStatus } = req.body;
 
