@@ -10,7 +10,7 @@ const port = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-  origin:['http://localhost:5173'],
+  origin:['http://localhost:5173','https://life-insurance-app-ee9f3.web.app'],
   credentials:true
 }));
 
@@ -47,7 +47,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const db = client.db("insuranceDB");
 
 
@@ -72,7 +72,8 @@ async function run() {
 
   res.cookie('token', token, {
     httpOnly: true,
-    secure: false 
+    secure: process.env.NODE_ENV === 'production', 
+    sameSite: 'none'
   });
 
   res.send({ success: true });
@@ -98,7 +99,8 @@ const verifyAgent = async (req, res, next) => {
  app.post('/logout', (req, res) => {
   res.clearCookie('token', {
     httpOnly: true,
-    secure: false, 
+    secure: process.env.NODE_ENV === 'production', 
+    sameSite:'none'
    
   });
   res.send({ success: true });
@@ -908,7 +910,7 @@ app.patch('/applications/assign/:id',verifyToken,verifyAdmin, async (req, res) =
   }
 });
  
-app.get('/transactions', async (req, res) => {
+app.get('/transactions',verifyToken,verifyAdmin, async (req, res) => {
   const { from, to, user, policy } = req.query;
   const query = {};
 
