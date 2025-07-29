@@ -428,7 +428,7 @@ app.delete('/blogs/:id', async (req, res) => {
 
 
 // get agents api
-app.get('/agents', async (req, res) => {
+app.get('/agents/top', async (req, res) => {
   try {
     const agents = await collections.users
       .find({ role: 'agent' })
@@ -438,6 +438,17 @@ app.get('/agents', async (req, res) => {
     res.send(agents);
   } catch (error) {
     res.status(500).send({ message: 'Failed to fetch agents' });
+  }
+});
+
+// all agents 
+app.get("/agents",verifyToken, async (req, res) => {
+  try {
+    const result = await collections.users.find({ role: "agent" }).toArray();
+    res.send(result);
+  } catch (error) {
+    console.error("Error fetching agents:", error);
+    res.status(500).send({ message: "Failed to fetch agents" });
   }
 });
 // all polices
@@ -708,35 +719,12 @@ app.get('/applications/customer',verifyToken, async (req, res) => {
 
 
 app.post('/reviews',verifyToken, async (req, res) => {
-  try {
-    const { policyId, rating, feedback, customerName, customerEmail } = req.body;
-
-    if (!policyId || !rating) {
-      return res.status(400).send({ error: 'policyId and rating are required' });
-    }
-
-
-    await collections.reviews.insertOne({
-      policyId: new ObjectId(policyId),
-      rating: Number(rating),
-      feedback,
-      customerName,
-      customerEmail,
-      createdAt: new Date()
-    });
-
-   
-    await collections.policies.updateOne(
-      { _id: new ObjectId(policyId) },
-      { $set: { rating: Number(rating) } }
-    );
-
-    res.send({ message: 'Review saved and rating updated' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ error: 'Server error' });
-  }
+  const review = req.body;
+  console.log("Received review:", review); 
+  const result = await collections.reviews.insertOne(review);
+  res.send(result);
 });
+
 
 
 
