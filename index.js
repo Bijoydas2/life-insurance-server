@@ -254,6 +254,22 @@ app.get('/applications/summary',verifyToken, async (req, res) => {
     res.status(500).send({ message: "Failed to fetch popular policies" });
   }
 });
+// recent policies
+app.get('/policies/recent', async (req, res) => {
+  try {
+    const recentPolicies = await collections.policies
+      .find()
+      .sort({ createdAt: -1 }) 
+      .limit(6)              
+      .toArray();
+
+    res.send(recentPolicies);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: "Failed to fetch recent policies" });
+  }
+});
+
 // blogs
 app.get("/blogs/latest", async (req, res) => {
   try {
@@ -502,15 +518,21 @@ app.get('/admin/policies',verifyToken,verifyAdmin, async (req, res) => {
 });
 
 // Add new policy
-app.post('/policies',verifyToken,verifyAdmin, async (req, res) => {
+app.post('/policies', verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const policy = req.body; // validate fields on your own
+    const policy = {
+      ...req.body,
+      createdAt: new Date(), // createdAt automatically set
+    };
+
     const result = await collections.policies.insertOne(policy);
     res.status(201).send(result);
   } catch (error) {
+    console.error("Failed to add policy:", error);
     res.status(500).send({ message: "Failed to add policy" });
   }
 });
+
 
 // Update policy
 app.put('/policies/:id',verifyToken,verifyAdmin,  async (req, res) => {
