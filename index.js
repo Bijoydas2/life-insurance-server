@@ -287,14 +287,27 @@ app.get("/blogs/latest", async (req, res) => {
 
 // Get all blogs
 app.get('/blogs', async (req, res) => {
-
   try {
-    const blogs = await collections.blogs.find().sort({ createdAt: -1 }).toArray();
-    res.send(blogs);
+    const page = parseInt(req.query.page) || 1; 
+    const limit = parseInt(req.query.limit) || 8; 
+    const skip = (page - 1) * limit;
+
+    const totalBlogs = await collections.blogs.countDocuments();
+    const totalPages = Math.ceil(totalBlogs / limit);
+
+    const blogs = await collections.blogs
+      .find()
+      .sort({ createdAt: -1 }) 
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    res.send({ blogs, totalPages });
   } catch (error) {
     res.status(500).send({ message: 'Failed to fetch blogs' });
   }
 });
+
 
 app.get('/blogs/manage',verifyToken, async (req, res) => {
   const { email, role } = req.query;
