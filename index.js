@@ -10,7 +10,7 @@ const port = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-  origin:['http://localhost:5173','https://life-insurance-app-ee9f3.web.app'],
+  origin:['http://localhost:5173','https://life-insurance-app-client.vercel.app'],
   credentials:true
 }));
 
