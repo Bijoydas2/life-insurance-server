@@ -462,7 +462,7 @@ app.get('/agents/top', async (req, res) => {
     const agents = await collections.users
       .find({ role: 'agent' })
       .sort({ created_at: -1 }) 
-      .limit(3)
+      .limit(4)
       .toArray();
     res.send(agents);
   } catch (error) {
