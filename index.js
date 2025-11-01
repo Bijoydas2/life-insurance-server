@@ -246,7 +246,7 @@ app.get('/applications/summary',verifyToken, async (req, res) => {
     const popular = await collections.policies
       .find()
       .sort({ purchaseCount: -1 }) 
-      .limit(6)
+      .limit(8)
       .toArray();
 
     res.send(popular);
@@ -260,7 +260,7 @@ app.get('/policies/recent', async (req, res) => {
     const recentPolicies = await collections.policies
       .find()
       .sort({ createdAt: -1 }) 
-      .limit(6)              
+      .limit(8)              
       .toArray();
 
     res.send(recentPolicies);
